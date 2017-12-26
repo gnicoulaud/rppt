@@ -16,8 +16,8 @@ pp.isrunning = function() {
 	if(exists(".pp", .GlobalEnv)) {
 		pp <- .GlobalEnv$.pp
 		if(class(pp) == "COMIDispatch") {
-			if(pp.has(pp, "Name") {
-				res <- pp[["Name"]]== "Microsoft PowerPoint"
+			if(pp.has(pp, "Name")) {
+				res <- pp[["Name"]] == "Microsoft PowerPoint"
 			}
 		}
 	}
@@ -127,7 +127,7 @@ pp.names = function(o) {
 	if(pp.length(o) > 0) {
 		res <- sapply(o, pp.names)
 	} else {
-		res <- if(pp.has(o, "Name") o[["Name"]] else NA
+		res <- if(pp.has(o, "Name")) o[["Name"]] else NA
 	}
 	return(res)
 }
@@ -616,3 +616,4 @@ pp.ungroup = function(shapes) {
 	}
 	res
 }
+
