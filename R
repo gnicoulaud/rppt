@@ -331,7 +331,6 @@ pp.fill = function(shape, color, alpha) {
 	if(! missing(color)) {
 		if(is.na(color) | is.null(color)) {
 			f[["Visible"]] <- 0
-			res$color <- NA
 		} else {
 			f[["Visible"]] <- 1
 			if(is.character(color)) {
@@ -340,7 +339,6 @@ pp.fill = function(shape, color, alpha) {
 				stopifnot(color %in% 1:6)
 				c[["SchemeColor"]] <- color
 			}
-			res$color <- pp.color(c[["RGB"]])
 		}
 	}
 	if(! missing(alpha)) {
@@ -616,4 +614,6 @@ pp.ungroup = function(shapes) {
 	}
 	res
 }
+
+
 
