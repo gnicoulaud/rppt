@@ -1,0 +1,618 @@
+# ////////////////////////////////////////////////////////////////////////// #
+# RPPT
+# ////////////////////////////////////////////////////////////////////////// #
+
+pp.start = function(visible = TRUE) {
+	if(! "RDCOMClient" %in% .packages()) library("RDCOMClient")
+	.COMInit(TRUE)
+	.pp <<- COMCreate("PowerPoint.Application")
+	res <- pp.isrunning()
+	pp.visible(visible)
+	return(res)
+}
+
+pp.isrunning = function() {
+	res <- FALSE
+	if(exists(".pp", .GlobalEnv)) {
+		pp <- .GlobalEnv$.pp
+		if(class(pp) == "COMIDispatch") {
+			if(pp.has(pp, "Name") {
+				res <- pp[["Name"]]== "Microsoft PowerPoint"
+			}
+		}
+	}
+	return(res)
+}
+
+pp.isppobject = function(o) {
+	res <- FALSE
+	if(class(o) == "COMIDispatch") {
+		if(pp.has(o, "Application")) {
+			o <- o[["Application"]]
+			if(pp.has(o, "Name")) {
+				res <- o[["Name"]] == "Microsoft PowerPoint"
+			}
+		} else {
+			if(pp.has(o, "Name")) {
+				res <- o[["Name"]] == "Microsoft PowerPoint"
+			}
+		}
+	}
+	res
+}
+
+pp.isslide = function(o) {
+	res <- FALSE
+	if(pp.isppobject(o)) res <- pp.has(o, "SlideIndex")
+	res
+}
+
+pp.ispresentation = function(o) {
+	res <- FALSE
+	if(pp.isppobject(o)) res <- pp.has(o, "Slides")
+	res
+}
+
+pp.ispowerpoint = function(o) {
+	res <- FALSE
+	if(pp.isppobject(o)) {
+		if(pp.has(o, "Name")) {
+			res <- o[["Name"]] == "Microsoft PowerPoint" 
+		}
+	}
+	res
+}
+
+pp.parent = function(o, level) {
+	opt <- c("slide", "presentation", "application")
+	lv <- substr(level, 1, 1)
+	if(! lv %in% substr(opt, 1, 1)) {
+		stop("level must be one of: ", toString(opt))
+	}
+	f <- switch(lv,
+		s = pp.isslide,
+		p = pp.ispresentation,
+		a = pp.ispowerpoint)
+	i <- 0
+	while(! f(o)) {
+		o <- o[["Parent"]]
+		i <- i+1
+		if(i > 5) stop("could not find any parent ", level)
+	}
+	o
+}
+
+pp.visible = function(value) {
+	if(! pp.isrunning()) stop("PowerPoint is not running. Use pp.start().")
+	if(! missing(value)) .GlobalEnv$.pp[["Visible"]] <- as.logical(value)
+	res <- as.logical(.GlobalEnv$.pp[["Visible"]])
+	return(res)
+}
+
+pp.quit = function() {
+	if(! pp.isrunning()) stop("PowerPoint is not running. Use pp.start().")
+	.GlobalEnv$.pp$Quit()
+	.pp <<- NULL
+	rm(list = ".pp", envir = .GlobalEnv)
+	gc(verbose = FALSE)
+	.COMInit(FALSE)
+	res <- ! pp.isrunning()
+	return(res)
+}
+
+pp.has = function(o, what) {
+	class(try(o[[what]], silent = TRUE)) != "try-error"
+}
+
+pp.aslist = function(o) {
+	stopifnot(pp.has(o, "Count"))
+	res <- lapply(o, function(i) i)
+	names(res) <- pp.names(o)
+	res
+}
+
+pp.asrange = function(o) {
+	if(! is.list(o)) stop("o must be a list")
+	slide <- pp.parent(shapes[[1]], "slide")
+	names <- sapply(shapes, pp.names)
+	slide[["Shapes"]]$Range(names)
+}
+
+
+pp.length = function(o) {
+	if(pp.has(o, "Count")) o[["Count"]] else 0
+}
+
+pp.names = function(o) {
+	if(pp.length(o) > 0) {
+		res <- sapply(o, pp.names)
+	} else {
+		res <- if(pp.has(o, "Name") o[["Name"]] else NA
+	}
+	return(res)
+}
+
+"pp.names<-" = function(o, value) {
+	n <- pp.length(o)
+	if(n != length(value)) stop("different length")
+	if(n > 1) {
+		for(i in 1:n) {
+			a <- o$Item(i)
+			a[["Name"]] <- value[i]
+		}
+	} else {
+		o[["Name"]] <- value
+	}
+	return(invisible(o))
+}
+
+pp.select = function(o) {
+	ans <- try(o$Select(), silent = TRUE)
+	class(ans) != "try-error"
+}
+
+pp.selection = function() {
+	aw <- .GlobalEnv$.pp[["ActiveWindow"]]
+	res <- switch(aw[["Selection"]][["Type"]] + 1,
+		NULL,
+		aw[["Selection"]][["SlideRange"]],
+		aw[["Selection"]][["ShapeRange"]],
+		aw[["Selection"]][["TextRange"]])
+	return(res)
+}
+
+pp.delete = function(o) {
+	ans <- try(o$Delete(), silent = TRUE)
+	class(ans) != "try-error"
+}
+
+
+
+pp.customlayouts = function(presentation) {
+	if(! pp.ispresentation(presentation)) {
+		stop("presentation must be a presentation")
+	}
+	o <- presentation[["SlideMaster"]][["CustomLayouts"]]
+	pp.aslist(o)
+}
+
+pp.themecolors = function(presentation) {
+	if(! pp.ispresentation(presentation)) {
+		stop("presentation must be a presentation")
+	}
+	o <- presentation[["SlideMaster"]][["Theme"]]
+	sapply(1:12, function(i) {
+		pp.color(th$ThemeColorScheme(i)[["RGB"]])
+	} )
+}
+
+pp.themefonts = function(presentation) {
+	if(! pp.ispresentation(presentation)) {
+		stop("presentation must be a presentation")
+	}
+	o <- presentation[["SlideMaster"]][["Theme"]][["ThemeFontScheme"]]
+	c(o[["MinorFont"]]$Item(1)[["Name"]],
+	o[["MajorFont"]]$Item(1)[["Name"]])
+}
+
+pp.color = function(x) {
+	if(is.character(x)) {
+		res <- colSums(col2rgb(x) * as.hexmode(c(1, 256, 256^2)))
+	} else {
+		a <- format(as.hexmode(x), width = 6)
+		b <- as.integer(as.hexmode(substr(a, 1, 2)))
+		g <- as.integer(as.hexmode(substr(a, 3, 4)))
+		r <- as.integer(as.hexmode(substr(a, 5, 6)))
+		res <- rgb(r, g, b, max = 255)
+	}
+	res
+}
+
+pp.tintandshade = function(color, x) {
+	stopifnot(x >= -1 & x <= 1)
+	a <- colorRampPalette(c("black", color, "white"))(201)
+	a[round((1+x)*100)+1]
+}
+
+pp.presentations = function() {
+	if(! pp.isrunning()) pp.start()
+	res <- NULL
+	o <- .GlobalEnv$.pp[["Presentations"]]
+	if(pp.length(o) > 0) res <- pp.aslist(o)
+	return(res)
+}
+
+pp.open = function(path) {
+	if(! pp.isrunning()) pp.start()
+	if(missing(path)) {
+		res <- .GlobalEnv$.pp[["Presentations"]]$Add()
+	} else {
+		if(substr(path, 1, 4) != "http") path <- shortPathName(path)
+		res <- .GlobalEnv$.pp[["Presentations"]]$Open(path)
+	}
+	return(res)
+}
+
+pp.close = function(presentation) {
+	if(! pp.ispresentation(presentation)) {
+		stop("presentation must be a presentation")
+	}
+	res <- presentation$Close()
+	return(TRUE)
+}
+
+pp.save = function(presentation, path) {
+	if(! pp.ispresentation(presentation)) {
+		stop("presentation must be a presentation")
+	}
+	.GlobalEnv$.pp[["DisplayAlerts"]] <- FALSE
+	if(missing(path)) {
+		res <- presentation$Save()
+	} else {
+		res <- presentation$SaveAs(shortPathName(path))
+	}
+	.GlobalEnv$.pp[["DisplayAlerts"]] <- TRUE
+	as.logical(presentation[["Saved"]])
+}
+
+pp.slides = function(presentation) {
+	if(! pp.ispresentation(presentation)) {
+		stop("presentation must be a presentation")
+	}
+	res <- NULL
+	o <- presentation[["Slides"]]
+	if(pp.length(o) > 0) res <- pp.aslist(o)
+	return(res)
+}
+
+pp.addslide = function(presentation, index, layout) {
+	if(! pp.ispresentation(presentation)) {
+		stop("presentation must be a presentation")
+	}
+	o <- presentation[["Slides"]]
+	if(missing(index)) index <- pp.length(o)+1
+	if(missing(layout)) {
+		if(index == 1) {
+			layout <- pp.customlayouts(presentation)[[1]]
+		} else {
+			layout <- o[[index-1]][["CustomLayout"]]
+		}
+	} else {
+		layout <- pp.customlayouts(presentation)[[layout]]
+	}
+	res <- o$AddSlide(index, layout)
+	return(res)
+}
+
+pp.title = function(slide, title) {
+	o <- pp.aslist(slide[["Shapes"]][["Placeholders"]])
+	type <- sapply(o, function(i) i[["PlaceholderFormat"]][["Type"]])
+	ix <- type == 1
+	if(any(ix)) {
+		res <- o[[which(ix)]]
+		pp.write(o[[which(ix)]], title)
+	} else {
+		stop("no title placeholder")
+	}
+	invisible(res)
+}
+
+pp.shapes = function(slide) {
+	if(! pp.isslide(slide)) stop("slide must be a slide")
+	res <- NULL
+	o <- slide[["Shapes"]]
+	if(pp.length(o) > 0) res <- pp.aslist(o)
+	return(res)
+}
+
+pp.autoshape = function(slide, left, top, width, height, type = 1) {
+	if(! type %in% 1:137) stop("type must be in 1:137")
+	slide[["Shapes"]]$AddShape(type, left, top, width, height)
+}
+
+pp.segment = function(slide, left.1, top.1, left.2, top.2) {
+	slide[["Shapes"]]$AddLine(left.1, top.1, left.2, top.2)
+}
+
+pp.polygon = function(slide, left, top, curve = FALSE) {
+	stopifnot(length(left) == length(top))
+	o <- slide[["Shapes"]]$BuildFreeform(0, left[1], top[1])
+	for(i in 1:length(left)) {
+		if(! is.na(left[i]) & ! is.na(top[i])) {
+			o$AddNodes(as.integer(curve), 0, left[i], top[i])
+		}
+	}
+	o$ConvertToShape()
+}
+
+pp.fill = function(shape, color, alpha) {
+	f <- shape[["Fill"]]
+	c <- f[["ForeColor"]]
+	if(! missing(color)) {
+		if(is.na(color) | is.null(color)) {
+			f[["Visible"]] <- 0
+			res$color <- NA
+		} else {
+			f[["Visible"]] <- 1
+			if(is.character(color)) {
+				c[["RGB"]] <- pp.color(color)
+			} else {
+				stopifnot(color %in% 1:6)
+				c[["SchemeColor"]] <- color
+			}
+			res$color <- pp.color(c[["RGB"]])
+		}
+	}
+	if(! missing(alpha)) {
+		stopifnot(is.numeric(alpha))
+		stopifnot(alpha >= 0 & alpha <= 1)
+		f[["Transparency"]] <- 1-alpha
+	}
+	res <- list()
+	if(f[["Visible"]]) {
+		res$color <- pp.color(c[["RGB"]])
+		res$alpha <- 1-f[["Transparency"]]
+	} else {
+		res$color <- res$alpha <- NA
+	}
+	invisible(res)
+}
+
+pp.border = function(shape, color, lwd, lty) {
+	f <- shape[["Line"]]
+	c <- f[["ForeColor"]]
+	if(! missing(color)) {
+		if(is.na(color) | is.null(color)) {
+			f[["Visible"]] <- 0
+		} else {
+			f[["Visible"]] <- 1
+			if(is.character(color)) {
+				c[["RGB"]] <- pp.color(color)
+			} else {
+				stopifnot(color %in% 1:6)
+				c[["SchemeColor"]] <- color
+			}
+		}
+	}
+	if(! missing(lwd)) {
+		stopifnot(is.numeric(lwd))
+		stopifnot(lwd >= 0)
+		f[["Weight"]] <- lwd
+	}
+	if(! missing(lty)) {
+		stopifnot(lty %in% 1:12)
+		f[["DashStyle"]] <- lty
+	}
+	res <- list()
+	if(f[["Visible"]]) {
+		res$color <- pp.color(c[["RGB"]])
+		res$lwd <- f[["Weight"]]
+		res$lty <- f[["DashStyle"]]
+	} else {
+		res$lty <- res$lwd <- res$color <- NA
+	}
+	invisible(res)
+}
+
+pp.rotate = function(shape, angle, pivot) {
+	if(! missing(pivot)) {
+		opt <- c("tl", "ml", "bl", "tr", "mr", "br", "mt", "mb")
+		if(! pivot %in% tmp) {
+			stop("pivot must be one of: ", toString(sQuote(opt)))
+		}
+		l <- shape[["Left"]]
+		t <- shape[["Top"]]
+		w <- shape[["Width"]]
+		h <- shape[["Height"]]
+		a <- c(l+w/2, t+h/2)
+		if(pivot == "tl") {
+			rad <- sqrt((w/2)^2+(h/2)^2)
+			an <- angle*pi/180+asin((h/2)/rad)
+			b <- a + rad * c(cos(pi+an), sin(pi+an))
+			shape[["Left"]] <- l-(b[1]-l)
+			shape[["Top"]] <- t-(b[2]-t)
+		}
+		if(pivot == "bl") {
+			rad <- sqrt((w/2)^2+(h/2)^2)
+			an <- angle*pi/180-asin((h/2)/rad)
+			b <- a + rad * c(cos(pi+an), sin(pi+an))
+			shape[["Left"]] <- l-(b[1]-l)
+			shape[["Top"]] <- t+h-(b[2]-t)
+		}
+		if(pivot == "ml") {
+			rad <- w/2
+			an <- angle*pi/180
+			b <- a + rad * c(cos(pi+an), sin(pi+an))
+			shape[["Left"]] <- l-(b[1]-l)
+			shape[["Top"]] <- t+h/2-(b[2]-t)
+		}
+		if(pivot == "tr") {
+			rad <- sqrt((w/2)^2+(h/2)^2)
+			an <- angle*pi/180+asin((h/2)/rad)
+			b <- a + rad * c(cos(pi+an), sin(pi+an))
+			shape[["Left"]] <- l+w-(b[1]-l)
+			shape[["Top"]] <- t-(b[2]-t)
+		}
+		if(pivot == "br") {
+			rad <- sqrt((w/2)^2+(h/2)^2)
+			an <- angle*pi/180-asin((h/2)/rad)
+			b <- a + rad * c(cos(pi+an), sin(pi+an))
+			shape[["Left"]] <- l+w-(b[1]-l)
+			shape[["Top"]] <- t+h-(b[2]-t)
+		}
+		if(pivot == "mr") {
+			rad <- w/2
+			an <- angle*pi/180
+			b <- a + rad * c(cos(pi+an), sin(pi+an))
+			shape[["Left"]] <- l+w-(b[1]-l)
+			shape[["Top"]] <- t+h/2-(b[2]-t)
+		}
+		if(pivot == "mt") {
+			rad <- h/2
+			an <- angle*pi/180
+			b <- a + rad * c(cos(1.5*pi+an), sin(1.5*pi+an))
+			shape[["Left"]] <- l+w/2-(b[1]-l)
+			shape[["Top"]] <- t-(b[2]-t)
+		}
+		if(pivot == "mb") {
+			rad <- h/2
+			an <- angle*pi/180
+			b <- a + rad * c(cos(pi/2+an), sin(pi/2+an))
+			shape[["Left"]] <- l+w/2-(b[1]-l)
+			shape[["Top"]] <- t+h-(b[2]-t)
+		}
+	}
+	shape[["Rotation"]] <- angle
+	res <- list()
+	res$left <- shape[["Left"]]
+	res$top <- shape[["Top"]]
+	res$rotation <- shape[["Rotation"]]
+	invisible(res)
+}
+
+pp.flip = function(shape, vertical = FALSE) {
+	shape$Flip(as.integer(vertical))
+}
+
+pp.move = function(shape, pos) {
+	p <- shape[["ZOrderPosition"]]
+	if(is.finite(pos)) {
+		a <- ifelse(pos > 0, 2, 3)
+		for(i in 1:abs(pos)) shape$ZOrder(a)
+	} else {
+		if(pos > 0) shape$Zorder(0) else shape$Zorder(1)
+	}
+	shape[["ZOrderPosition"]]
+}
+
+pp.text = function(shape, font, size, color, margins, halign, valign,
+	before, within, after, orient, wrap, bold, italic, smallcaps, allcaps) {
+	stopifnot(as.logical(shape[["HasTextFrame"]]))
+	t <- shape[["TextFrame2"]]
+	f <- t[["TextRange"]][["Font"]]
+	c <- f[["Fill"]][["ForeColor"]]
+	p <- t[["TextRange"]][["ParagraphFormat"]]
+	if(! missing(font)) {
+		f[["Name"]] <- font
+	}
+	if(! missing(size)) {
+		f[["Size"]] <- size
+	}
+	if(! missing(color)) {
+		if(is.character(color)) {
+			c[["RGB"]] <- pp.color(color)
+		} else {
+			stopifnot(color %in% 1:6)
+			c[["SchemeColor"]] <- color
+		}
+	}
+	if(! missing(margins)) {
+		if(length(margins) == 1) margins <- rep(margins, 4)
+		if(length(margins) == 2) margins <- margins[c(1, 2, 1, 2)]
+		stopifnot(length(margins) == 4)
+		t[["MarginLeft"]] <- margins[1]
+		t[["MarginTop"]] <- margins[2]
+		t[["MarginRight"]] <- margins[3]
+		t[["MarginBottom"]] <- margins[4]
+	}
+	if(! missing(valign)) {
+		valign <- substr(tolower(valign), 1, 1)
+		stopifnot(valign %in% c("t", "c", "b"))
+		t[["VerticalAnchor"]] <- switch(valign, t = 1, c = 3, b = 4)
+	}
+	if(! missing(halign)) {
+		halign <- substr(tolower(halign), 1, 1)
+		stopifnot(halign %in% c("l", "c", "j", "r"))
+		p[["Alignment"]] <- switch(halign, l = 1, c = 2, j = 4, r = 3)
+	}
+	if(! missing(before)) {
+		stopifnot(is.numeric(before))
+		p[["SpaceBefore"]] <- max(0, before)
+	}
+	if(! missing(within)) {
+		stopifnot(is.numeric(within))
+		p[["SpaceWithin"]] <- max(0, within)
+	}
+	if(! missing(after)) {
+		stopifnot(is.numeric(after))
+		p[["SpaceAfter"]] <- max(0, after)
+	}
+	if(! missing(orient)) {
+		stopifnot(orient %in% 1:6)
+		t[["Orientation"]] <- orient
+	}
+	if(! missing(wrap)) t[["WordWrap"]] <- as.logical(wrap)
+	if(! missing(bold)) f[["Bold"]] <- as.logical(bold)
+	if(! missing(italic)) f[["Italic"]] <- as.logical(italic)
+	if(! missing(smallcaps)) {
+		stopifnot(missing(allcaps))
+		f[["Smallcaps"]] <- as.logical(smallcaps)
+	}
+	if(! missing(allcaps)) {
+		stopifnot(missing(smallcaps))
+		f[["Allcaps"]] <- as.logical(allcaps)
+	}
+	res <- list()
+	res$font <- f[["Name"]]
+	res$size <- f[["Size"]]
+	res$color <- pp.color(c[["RGB"]])
+	res$margins <- c(t[["MarginLeft"]], t[["MarginTop"]],
+		t[["MarginRight"]], t[["MarginBottom"]])
+	res$halign <- c("l", "c", "r", "j")[p[["Alignment"]]]
+	res$valign <- c("t", "", "c", "b")[t[["VerticalAnchor"]]]
+	res$before <- p[["SpaceBefore"]]
+	res$within <- p[["SpaceWithin"]]
+	res$after <- p[["SpaceAfter"]]
+	res$orient <- t[["Orientation"]]
+	res$wrap <- as.logical(t[["WordWrap"]])
+	res$bold <- as.logical(f[["Bold"]])
+	res$italic <- as.logical(f[["Italic"]])
+	res$smallcaps <- as.logical(f[["Smallcaps"]])
+	res$allcaps <- as.logical(f[["Allcaps"]])
+	invisible(res)
+}
+
+pp.write = function(shape, text, append = FALSE) {
+	if(! append) shape[["TextFrame2"]]$DeleteText()
+	if(is.null(text)) {
+		shape[["TextFrame2"]]$DeleteText()
+	} else {
+		r <- shape[["TextFrame2"]][["TextRange"]]
+		r$InsertAfter(text)
+	}
+	invisible(text)
+}
+
+pp.read = function(shape) {
+	shape[["TextFrame"]][["TextRange"]][["Text"]]
+}
+
+pp.merge = function(shapes, mode = 1) {
+	if(is.list(shapes)) shapes <- pp.asrange(shapes)
+	cmd <- c("union", "combine", "intersect", "substract", "fragment")
+	if(is.character(mode)) {
+		mode <- which(substr(cmd, 1, 2) == substr(tolower(mode), 1, 2))
+		if(! length(mode)) stop("'mode' must be in: ", toString(cmd))
+	}
+	n1 <- names(pp.shapes(slide))
+	ans <- shapes$MergeShapes(mode, shapes[[1]])
+	n2 <- names(a <- pp.shapes(slide))
+	ix <- which(! n2 %in% n1)
+	res <- a[ix]
+	return(res)
+}
+
+pp.group = function(shapes) {
+	if(is.list(shapes)) shapes <- pp.asrange(shapes)
+	shapes$Group()
+}
+
+pp.ungroup = function(shapes) {
+	if(pp.has(shapes, "GroupItems")) {
+		a <- shapes$Ungroup()
+		res <- pp.aslist(a)
+	} else {
+		res <- list(shapes)
+	}
+	res
+}
